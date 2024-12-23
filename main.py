@@ -1,6 +1,7 @@
 import pygame
 import math
 import time
+import numpy as np
 pygame.init() #초기화
 
 #화면 크기 설정
@@ -79,7 +80,8 @@ class titleScene: # 타이틀 화면
 class ingameScene: # 인게임 화면
     def __init__(self):
         #모든 각은 라디안
-        self.drawing = [] # 그린 위치들
+        self.drawPoints = [] # 그린 위치들
+        self.calcPoints = [] # 계산되는 위치들
         self.isDrawMode = False # 그리는 중 여부
         self.isDrawOverHalf = False # 원을 절반 넘게 그렸는지 여부
         self.isDrawClockwise = None # 그리는 방향이 시계방향인지 여부
@@ -100,7 +102,7 @@ class ingameScene: # 인게임 화면
                 elif(not (40 < mouse[0] < screen_height - 50 and 40 < mouse[1] < screen_height - 50)): # 그릴수 있는 하얀 박스 밖 -> 너무 멂
                     print('toofar')
                 else:
-                    if(not self.drawing):
+                    if(not self.drawPoints):
                         self.firstPointAngle = math.atan2(-(mouse[1] - screen_height/2), mouse[0] - screen_height/2)
                         self.lastPointAngle = self.firstPointAngle
 
@@ -115,6 +117,7 @@ class ingameScene: # 인게임 화면
                             self.isDrawClockwise = False
                     elif(175 < angleDiff < 185): # 180도 돔 (범위 +-5도)
                         self.isDrawOverHalf = True
+                    #TODO : 여기도 끝남 검사
                     
                     # angleDiff = lastPointAngle과의 각 (도)
                     angleDiff = math.degrees(angleSubtract(angle, self.lastPointAngle))
@@ -129,19 +132,51 @@ class ingameScene: # 인게임 화면
                         elif(angleDiff < -1):
                             print('wrongway')
 
-                    self.drawing.append(mouse)
-        if(event.type == pygame.MOUSEBUTTONUP):
-            pass
+                    # 그린 점 추가
+                    self.calcPoints.append([mouse[0] - screen_height/2, -(mouse[1] - screen_height/2)])
+                    if(self.drawPoints):
+                        #직전 점과 거리 멀 경우 -> 2픽셀당 점 1개씩 추가
+                        pCount = ((self.drawPoints[-1][0] - mouse[0])**2 + (self.drawPoints[-1][1] - mouse[1])**2)**0.5 // 2
+                        for i in range(1, int(pCount + 1)):
+                            #그리는 점과 직전 점을 i : (pCount - i)로 내분
+                            coord = [(i*self.drawPoints[-1][0] + (pCount - i)*mouse[0])/pCount, (i*self.drawPoints[-1][1] + (pCount - i)*mouse[1])/pCount]
+                            self.calcPoints.append([coord[0] - screen_height/2, -(coord[1] - screen_height/2)])
+                    self.drawPoints.append(mouse)
+
+        if(event.type == pygame.MOUSEBUTTONUP and self.isDrawMode):
+            if(self.isDrawOverHalf):
+                # angle = 중점을 원점으로 한 좌표평면에서 마우스 좌표의 편각 (라디안)
+                angle = math.atan2(-(mouse[1] - screen_height/2), mouse[0] - screen_height/2)
+                # angleDiff = firstPointAngle과의 각 (도)
+                angleDiff = math.degrees(angleSubtract(angle, self.firstPointAngle))
+
+                # 한바퀴에서 10도 미만으로 모자람 -> 다 그린 것으로
+                if(self.isDrawClockwise and angleDiff < 10):
+                    print('end')
+                    self.calc()
+                elif(self.isDrawClockwise is False and angleDiff > -10):
+                    print('end')
+                    self.calc()
+            print('stopdraw')
+
     def draw(self):
-        for i in range(len(self.drawing)): # 그림
-            pygame.draw.circle(screen, WHITE, self.drawing[i], 10, 10)
+        for i in range(len(self.drawPoints)): # 그림
+            pygame.draw.circle(screen, WHITE, self.drawPoints[i], 10, 10)
             if(i != 0):
-                pygame.draw.line(screen, WHITE, self.drawing[i-1], self.drawing[i], 24)
+               pygame.draw.line(screen, WHITE, self.drawPoints[i-1], self.drawPoints[i], 24)
+        #for i in range(len(self.calcPoints)): # 계산된 점 그림(디버그용)
+        #    pygame.draw.circle(screen, [255,255,0], [self.calcPoints[i][0] + screen_height/2, screen_height/2 - self.calcPoints[i][1]], 1, 1)
         pygame.draw.circle(screen, GRAY, [screen_height/2, screen_height/2], 10, 10) # 중점
         pygame.draw.rect(screen, WHITE, [30, 30, screen_height - 70, screen_height - 70], 3) # 그릴수 있는 하얀 박스
         pygame.draw.rect(screen, WHITE, [screen_width - 330, 30, 300, 600], 3) # 리더보드
         backButten = textButten("돌아가기", [screen_width - 180, 700], lambda: changeScene(titleScene)) # 돌아가기 버튼
 
+    def calc(self):
+        distances = []
+        for i in range(len(self.calcPoints)):
+            distances.append((self.calcPoints[i][0]**2 + self.calcPoints[i][1]**2)**0.5)
+        r = np.mean(distances); print(r)
+        sd = np.std(distances); print(sd)
 
 #이벤트 루프
 running = True #게임 진행 여부에 대한 변수 True : 게임 진행 중
