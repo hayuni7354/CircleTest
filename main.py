@@ -174,7 +174,6 @@ class IngameScene: # 인게임 화면
                         if(self.isDrawClockwise and -170 < angleDiff < -10):
                             self.gameEnd0()
                         elif(self.isDrawClockwise is False and 170 > angleDiff > 10):
-                            print(angleDiff)
                             self.gameEnd0()
                     
                     # angleDiff = lastPointAngle과의 각 (도)
@@ -329,7 +328,7 @@ class PostScoreScene: # 점수등록 화면
             if(click[0]):
                 if((40 < mouse[0] < 780 and 660 < mouse[1] < 900)): # 그릴수 있는 하얀 박스 밖 -> 상자 벗어남
                     # 그린 점 추가
-                    self.namePoints.append([mouse[0] - 30, mouse[1] - (g_screen_height/2 + 160)])
+                    self.namePoints.append([mouse[0] - 30, mouse[1] - 650])
     def draw(self):
         for i in range(len(g_bestDrawPoints)): # 그림(1/2 축척, (15,15) 평행이동)
             pygame.draw.circle(g_screen, WHITE, [g_bestDrawPoints[i][0]/2 + 15, g_bestDrawPoints[i][1]/2+ 15], 5, 5)
@@ -349,7 +348,7 @@ class PostScoreScene: # 점수등록 화면
         g_screen.blit(accText, (50, 550))
         pygame.draw.rect(g_screen, WHITE, [30, 650, 760, 260], 3) #이름 쓰는 하얀 박스
         for i in range(len(self.namePoints)): # 이름
-            pygame.draw.circle(g_screen, WHITE, [self.namePoints[i][0] + 30, self.namePoints[i][1] + (g_screen_height/2 + 160)], 5, 5)
+            pygame.draw.circle(g_screen, WHITE, [self.namePoints[i][0] + 30, self.namePoints[i][1] + 650], 5, 5)
 
         nameResetButten = TextButten("이름 초기화", [g_screen_width - 180, 580], lambda: self.resetName()) # 이름리셋 버튼
         backButten = TextButten("돌아가기", [g_screen_width - 180, 700], lambda: changeScene(IngameScene)) # 돌아가기 버튼
@@ -374,10 +373,32 @@ class ScoreBoardScene():
         pygame.draw.rect(g_screen, WHITE, [30, 30, g_screen_width - 60, g_screen_height - 220], 3) # 점수표 상자
         backButten = TextButten("돌아가기", [g_screen_width - 180, 920], lambda: changeScene(TitleScene)) # 돌아가기 버튼
         for i in range(5):
-            text = TITLEFONT.render(f'999', True, YELLOW)
-            g_screen.blit(text, (70, 100 + 100*i))
+            text = TITLEFONT.render(f'999', True, YELLOW) # 순위
+            textRect = text.get_rect()
+            textRect.centerx = 130
+            textRect.y = 100 + 100*i
+            g_screen.blit(text, textRect)
+
+            pygame.draw.rect(g_screen, WHITE, [230, 90, 760/3, 260/3], 3) # 이름 상자
             for j in range(len(g_scoreBoard.data[0][2])): # 이름
-                pygame.draw.circle(g_screen, WHITE, [g_scoreBoard.data[0][2][j][0]/4 + 170, g_scoreBoard.data[0][2][j][1]/4 + 100], 5, 5)
+                pygame.draw.circle(g_screen, WHITE, [g_scoreBoard.data[0][2][j][0]/3 + 230, g_scoreBoard.data[0][2][j][1]/3 + 90], 2, 2)
+
+            pygame.draw.circle(g_screen, GRAY, [590 + 260/3*(512/934), 90 + 260/3*(512/934)], 1, 1) # 중점
+            pygame.draw.rect(g_screen, WHITE, [590, 90, 260/3, 260/3], 3) # 그림 상자
+            for j in range(len(g_scoreBoard.data[0][1])): # 그림
+                pygame.draw.circle(g_screen, WHITE, [(g_scoreBoard.data[0][1][j][0] - 30)*260/((g_screen_height - 120)*3) + 590, (g_scoreBoard.data[0][1][j][1] - 30)*260/((g_screen_height - 120)*3) + 90], 2, 2)
+
+            text = TITLEFONT.render(f'999점', True, WHITE) # 점수
+            textRect = text.get_rect()
+            textRect.centerx = 850
+            textRect.y = 100 + 100*i
+            g_screen.blit(text, textRect)
+
+            text = TITLEFONT.render(f'99.9%', True, WHITE) # 정확도
+            textRect = text.get_rect()
+            textRect.centerx = 1080
+            textRect.y = 100 + 100*i
+            g_screen.blit(text, textRect)
 
 
 #이벤트 루프
