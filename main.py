@@ -2,7 +2,7 @@ import pygame
 import math
 import time
 import numpy as np
-import heapq
+from sortedcontainers import SortedList
 import copy
 pygame.init() #초기화
 
@@ -30,6 +30,7 @@ MAXSCORE = 999 # 최대 점수
 #전역변수들
 g_bestAcc = 0 # 최고 정확도
 g_bestDrawPoints = [] # 최고 정확도를 얻은 원
+g_buttenCoolTime = 0 # 버튼 누르고 쿨타임
 
 # numpy float 출력 옵션 변경(소수점 3자리까지 출력, array의 원소 값 자체가 변경되지는 않음)
 #np.set_printoptions(precision=3, suppress=True)
@@ -42,8 +43,10 @@ class TextButten: # 글자 버튼
             click = pygame.mouse.get_pressed()
             color = None
             if(abs(mouse[0] - center[0]) < size[0]/2 and abs(mouse[1] - center[1]) < size[1]/2):
+                global g_buttenCoolTime
                 color = YELLOW
-                if(click[0] and (action != None)):
+                if(click[0] and (action != None) and g_buttenCoolTime == 0):
+                    g_buttenCoolTime = 30
                     time.sleep(0.001)
                     action()
             else:
@@ -58,18 +61,27 @@ class TextButten: # 글자 버튼
 
 class ScoreBoard:
     def __init__(self):
-        self.data = []
+        self.data = SortedList(key = lambda x: (-x['acc'] , x['id']))
         self.nextID = 0
-    def postScore(self, acc, drawPoints, namePoints): # 정확도, 그림, 이름으로 점수 등록
-        heapq.heappush(self.data, [-acc, drawPoints, namePoints, self.nextID])
+    def __len__(self):
+        return len(self.data)
+    def add(self, acc, drawPoints, namePoints): # 정확도, 그림, 이름으로 점수 등록
+        #self.data.add([-acc, drawPoints, namePoints, self.nextID])
+        self.data.add({'acc' : acc, 'id' : self.nextID, 'drawPoints' : drawPoints, 'namePoints' : namePoints})
         self.nextID += 1
         return self.nextID
-    def searchRankbyNewAcc(self, acc): # acc가 점수표에 추가된다면 몇 등일지를 반환
-        temp = copy.deepcopy(self.data)
-        heapq.heappush(temp, [-acc, [], [], -1])
-        for i in range(1, len(temp) + 1):
-            if(heapq.heappop(temp)[3] == -1):
-                return i
+    def indexWhenInserted(self, acc): # acc가 점수표에 추가된다면 몇 등일지를 반환
+        temp = {'acc' : acc, 'id' : -1, 'drawPoints' : [], 'namePoints' : []}
+        self.data.add(temp)
+        rank = self.data.bisect_left(temp) + 1 # 1등부터 시작
+        self.data.remove(temp)
+        return rank
+    def rangeQuery(self, m, n): # m등부터 n등까지의 값 반환 (m,n등 포함, m<n), 누락된 등수는 None으로 채움
+        temp = list(self.data.islice(m - 1, n)) # ex: 1등~5등 -> 0,1,2,3,4
+        for i in range(len(temp), n - m + 1):
+            temp.append(None)
+        return temp
+
 
 
 g_scoreBoard = ScoreBoard()
@@ -167,13 +179,13 @@ class IngameScene: # 인게임 화면
                             self.isDrawClockwise = True
                         elif(angleDiff > 1):
                             self.isDrawClockwise = False
-                    elif(175 < angleDiff < 185): # 180도 돔 (범위 +-5도)
+                    elif(170 < angleDiff or angleDiff < -170): # 180도 돔 (범위 +-10도)
                         self.isDrawOverHalf = True
                     # 한바퀴에서 10도 초과로 넘침 -> 다 그린 것으로
                     if(self.isDrawOverHalf):
-                        if(self.isDrawClockwise and -170 < angleDiff < -10):
+                        if(self.isDrawClockwise and -165 < angleDiff < -10):
                             self.gameEnd0()
-                        elif(self.isDrawClockwise is False and 170 > angleDiff > 10):
+                        elif(self.isDrawClockwise is False and 165 > angleDiff > 10):
                             self.gameEnd0()
                     
                     # angleDiff = lastPointAngle과의 각 (도)
@@ -236,7 +248,7 @@ class IngameScene: # 인게임 화면
         else: color = GREEN
         if(not math.isnan(acc)):
             #TODO : 텍스트 관련 변수들 이름 앞 acc 제거
-            accText = TEXTFONT.render(f'{acc*100 : .1f}%', True, color)
+            accText = TEXTFONT.render(f'{math.floor(self.getAcc()*1000)/10}%', True, color)
             accTextRect = accText.get_rect()
             accTextRect.centerx = g_screen_height/2 - 5
             accTextRect.centery = g_screen_height/2 - 50
@@ -244,7 +256,7 @@ class IngameScene: # 인게임 화면
 
         if(self.gameEndID == 0):
         #if(not math.isnan(acc)):
-            accText = TEXTFONT.render(f'{toScore(acc) : .0f}점', True, color)
+            accText = TEXTFONT.render(f'{math.floor(toScore(self.getAcc()))}점', True, color)
             accTextRect = accText.get_rect()
             accTextRect.centerx = g_screen_height/2
             accTextRect.centery = g_screen_height/2 + 50
@@ -320,13 +332,13 @@ class IngameScene: # 인게임 화면
 class PostScoreScene: # 점수등록 화면
     def __init__(self):
         self.namePoints = [] # 이름 쓴 위치들
-        self.rank = g_scoreBoard.searchRankbyNewAcc(g_bestAcc) # 최고점수가 추가될 경우의 순위
+        self.rank = g_scoreBoard.indexWhenInserted(g_bestAcc) # 최고점수가 추가될 경우의 순위
     def event(self, event):
         mouse = pygame.mouse.get_pos()
         click = pygame.mouse.get_pressed()
         if(event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.MOUSEMOTION):
             if(click[0]):
-                if((40 < mouse[0] < 780 and 660 < mouse[1] < 900)): # 그릴수 있는 하얀 박스 밖 -> 상자 벗어남
+                if((40 < mouse[0] < 780 and 660 < mouse[1] < 900 and len(self.namePoints) < 10000)): # 그릴수 있는 하얀 박스 밖 -> 상자 벗어남
                     # 그린 점 추가
                     self.namePoints.append([mouse[0] - 30, mouse[1] - 650])
     def draw(self):
@@ -337,11 +349,11 @@ class PostScoreScene: # 점수등록 화면
         pygame.draw.circle(g_screen, GRAY, [g_screen_height/4 + 15, g_screen_height/4 + 15], 5, 5) # 중점
         pygame.draw.rect(g_screen, WHITE, [30, 30, (g_screen_height - 70)/2  + 15, (g_screen_height - 70)/2 + 15], 3) # 그릴수 있는 하얀 박스(였던것)
 
-        accText = TITLEFONT.render(f'최고 정확도 : {g_bestAcc*100 : .1f}%', True, WHITE)
+        accText = TITLEFONT.render(f'최고 정확도 : {math.floor(g_bestAcc*1000)/10}%', True, WHITE)
         g_screen.blit(accText, ((g_screen_height - 70)/2 + 80, 100))
-        accText = TITLEFONT.render(f'최고 점수 : {toScore(g_bestAcc) : .0f}점', True, WHITE)
+        accText = TITLEFONT.render(f'최고 점수 : {math.floor(toScore(g_bestAcc))}점', True, WHITE)
         g_screen.blit(accText, ((g_screen_height - 70)/2 + 80, 180))
-        accText = TITLEFONT.render(f'현재 순위 : {self.rank : .0f}등', True, WHITE)
+        accText = TITLEFONT.render(f'현재 순위 : {self.rank}등', True, WHITE)
         g_screen.blit(accText, ((g_screen_height - 70)/2 + 80, 260))
 
         accText = TITLEFONT.render('이름을 써 주세요', True, WHITE)
@@ -359,46 +371,73 @@ class PostScoreScene: # 점수등록 화면
         global g_scoreBoard
         global g_bestAcc
         global g_bestDrawPoints
-        g_scoreBoard.postScore(g_bestAcc, g_bestDrawPoints, self.namePoints)
+        g_scoreBoard.add(g_bestAcc, g_bestDrawPoints, self.namePoints)
         g_bestAcc = 0
         g_bestDrawPoints = []
+        print(len(self.namePoints))
         changeScene(TitleScene)
 
 class ScoreBoardScene():
     def __init__(self):
-        pass
+        self.page = 1 # 1부터 시작
+        self.maxPage = len(g_scoreBoard) // 6
+        if(self.maxPage < 1): self.maxPage = 1
+        self.viewingScores = g_scoreBoard.rangeQuery(1,6)
     def event(self, event):
         pass
     def draw(self):
-        pygame.draw.rect(g_screen, WHITE, [30, 30, g_screen_width - 60, g_screen_height - 220], 3) # 점수표 상자
         backButten = TextButten("돌아가기", [g_screen_width - 180, 920], lambda: changeScene(TitleScene)) # 돌아가기 버튼
-        for i in range(5):
-            text = TITLEFONT.render(f'999', True, YELLOW) # 순위
-            textRect = text.get_rect()
-            textRect.centerx = 130
-            textRect.y = 100 + 100*i
-            g_screen.blit(text, textRect)
+        # 페이지 이동 버튼들 (<<, <, >, >>)
+        TextButten("<<", [80, 920], lambda: self.addPageNum(-10), True, [100, 100])
+        TextButten("<", [210, 920], lambda: self.addPageNum(-1), True, [100, 100])
+        TextButten(">", [340, 920], lambda: self.addPageNum(1), True, [100, 100])
+        TextButten(">>", [470, 920], lambda: self.addPageNum(10), True, [100, 100])
 
-            pygame.draw.rect(g_screen, WHITE, [230, 90, 760/3, 260/3], 3) # 이름 상자
-            for j in range(len(g_scoreBoard.data[0][2])): # 이름
-                pygame.draw.circle(g_screen, WHITE, [g_scoreBoard.data[0][2][j][0]/3 + 230, g_scoreBoard.data[0][2][j][1]/3 + 90], 2, 2)
+        text = TITLEFONT.render(f'{self.page} / {self.maxPage}', True, YELLOW) # 순위
+        textRect = text.get_rect()
+        textRect.centerx = 735
+        textRect.centery = 920
+        g_screen.blit(text, textRect)
 
-            pygame.draw.circle(g_screen, GRAY, [590 + 260/3*(512/934), 90 + 260/3*(512/934)], 1, 1) # 중점
-            pygame.draw.rect(g_screen, WHITE, [590, 90, 260/3, 260/3], 3) # 그림 상자
-            for j in range(len(g_scoreBoard.data[0][1])): # 그림
-                pygame.draw.circle(g_screen, WHITE, [(g_scoreBoard.data[0][1][j][0] - 30)*260/((g_screen_height - 120)*3) + 590, (g_scoreBoard.data[0][1][j][1] - 30)*260/((g_screen_height - 120)*3) + 90], 2, 2)
+        pygame.draw.rect(g_screen, WHITE, [30, 30, g_screen_width - 60, g_screen_height - 220], 3) # 점수표 상자
+        for i in range(6):
+            if(not self.viewingScores[i] is None): # None일 경우 누락된 순위 -> 표시 X
+                text = TITLEFONT.render(f'{6*(self.page - 1) + i + 1}', True, YELLOW) # 순위
+                textRect = text.get_rect()
+                textRect.centerx = 130
+                textRect.y = 90 + 120*i
+                g_screen.blit(text, textRect)
 
-            text = TITLEFONT.render(f'999점', True, WHITE) # 점수
-            textRect = text.get_rect()
-            textRect.centerx = 850
-            textRect.y = 100 + 100*i
-            g_screen.blit(text, textRect)
+            
+                name = self.viewingScores[i]['namePoints']
+                pygame.draw.rect(g_screen, WHITE, [230, 90 + 120*i, 760/3, 260/3], 3) # 이름 상자
+                for j in range(len(name)): # 이름
+                    pygame.draw.circle(g_screen, WHITE, [name[j][0]/3 + 230, name[j][1]/3 + 90 + 120*i], 2, 2)
 
-            text = TITLEFONT.render(f'99.9%', True, WHITE) # 정확도
-            textRect = text.get_rect()
-            textRect.centerx = 1080
-            textRect.y = 100 + 100*i
-            g_screen.blit(text, textRect)
+                draw = self.viewingScores[i]['drawPoints']
+                pygame.draw.circle(g_screen, GRAY, [590 + 260/3*(512/934), 90 + 260/3*(512/934) + 120*i], 1, 1) # 중점
+                pygame.draw.rect(g_screen, WHITE, [590, 90 + 120*i, 260/3, 260/3], 3) # 그림 상자
+                for j in range(len(draw)): # 그림
+                    pygame.draw.circle(g_screen, WHITE, [(draw[j][0] - 30)*260/((g_screen_height - 120)*3) + 590, (draw[j][1] - 30)*260/((g_screen_height - 120)*3) + 90 + 120*i], 2, 2)
+
+                text = TITLEFONT.render(f'{math.floor(toScore(self.viewingScores[i]["acc"]))}점', True, WHITE) # 점수
+                textRect = text.get_rect()
+                textRect.centerx = 850
+                textRect.y = 90 + 120*i
+                g_screen.blit(text, textRect)
+
+                text = TITLEFONT.render(f'{math.floor(self.viewingScores[i]["acc"]*1000)/10}%', True, WHITE) # 정확도
+                textRect = text.get_rect()
+                textRect.centerx = 1080
+                textRect.y = 90 + 120*i
+                g_screen.blit(text, textRect)
+    def addPageNum(self, num): # num이 양수면 오른쪽으로, 음수면 왼쪽으로 절댓값만큼 점수표 넘김
+        self.page += num
+        if(self.page < 1):
+            self.page = 1
+        if(self.page > self.maxPage):
+            self.page = self.maxPage
+        self.viewingScores = g_scoreBoard.rangeQuery(6*(self.page - 1) + 1, 6*(self.page - 1) + 6)
 
 
 #이벤트 루프
@@ -416,6 +455,8 @@ while g_running:
     #screen.blit(background, (0, 0)) #배경에 이미지 그려주고 위치 지정
     g_game.draw() # 화면 그리기 처리
     pygame.display.update()
+    if(g_buttenCoolTime > 0):
+        g_buttenCoolTime -= 1
     g_clock.tick(120)
 
 
