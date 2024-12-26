@@ -4,6 +4,7 @@ import time
 import numpy as np
 from sortedcontainers import SortedList
 import copy
+import pickle
 pygame.init() #초기화
 
 #화면 크기 설정
@@ -61,10 +62,12 @@ class TextButten: # 글자 버튼
 
 class ScoreBoard:
     def __init__(self):
-        self.data = SortedList(key = lambda x: (-x['acc'] , x['id']))
+        self.data = SortedList(key = self.key)
         self.nextID = 0
     def __len__(self):
         return len(self.data)
+    def key(self, x):
+        return (-x['acc'] , x['id'])
     def add(self, acc, drawPoints, namePoints): # 정확도, 그림, 이름으로 점수 등록
         #self.data.add([-acc, drawPoints, namePoints, self.nextID])
         self.data.add({'acc' : acc, 'id' : self.nextID, 'drawPoints' : drawPoints, 'namePoints' : namePoints})
@@ -82,9 +85,9 @@ class ScoreBoard:
             temp.append(None)
         return temp
 
-
-
 g_scoreBoard = ScoreBoard()
+
+
 
 def changeScene(scene): # 인자는 인스턴스가 아닌 클래스로 주어져야 한다
     global g_game
@@ -131,7 +134,7 @@ class TitleScene: # 타이틀 화면
         # 버튼들
         startButten = TextButten("시작하기!", [g_screen_width/2, 675], lambda: changeScene(IngameScene))
         boardButten = TextButten("점수판", [g_screen_width/2 + 350, 675], lambda: changeScene(ScoreBoardScene))
-        creditButten = TextButten("크레딧", [g_screen_width/2 - 350, 675])
+        creditButten = TextButten("크레딧", [g_screen_width/2 - 350, 675], lambda: changeScene(CreditScene))
 
 class IngameScene: # 인게임 화면
     def __init__(self):
@@ -147,6 +150,8 @@ class IngameScene: # 인게임 화면
         self.isDrawClockwise = None # 그리는 방향이 시계방향인지 여부
         self.firstPointAngle = None # 중점에 대한 첫 위치의 편각
         self.lastPointAngle = None # 가장 그리는 방향으로 많이 돈 위치의 편각
+
+        self.viewingScores = g_scoreBoard.rangeQuery(1,11) # 오른쪽 점수표의 점수들
 
     def event(self, event):
         mouse = pygame.mouse.get_pos()
@@ -308,7 +313,27 @@ class IngameScene: # 인게임 화면
 
         pygame.draw.rect(g_screen, WHITE, [g_screen_width - 330, 30, 300, 600], 3) # 리더보드
         backButten = TextButten("돌아가기", [g_screen_width - 180, 700], lambda: changeScene(TitleScene)) # 돌아가기 버튼
-        postScoreButten = TextButten("점수등록", [g_screen_width - 180, 820], lambda: changeScene(PostScoreScene), self.gameEndID == 0) # 점수등록 버튼
+        #postScoreButten = TextButten("점수등록", [g_screen_width - 180, 820], lambda: changeScene(PostScoreScene), self.gameEndID == 0) # 점수등록 버튼
+
+        for i in range(11):
+            if(not self.viewingScores[i] is None): # None일 경우 누락된 순위 -> 표시 X
+                text = TEXTFONT.render(f'{i + 1}', True, YELLOW) # 순위
+                textRect = text.get_rect()
+                textRect.centerx = g_screen_width - 280
+                textRect.y = 55 + 50*i
+                g_screen.blit(text, textRect)
+
+                text = TEXTFONT.render(f'{math.floor(toScore(self.viewingScores[i]["acc"]))}점', True, WHITE) # 점수
+                textRect = text.get_rect()
+                textRect.centerx = g_screen_width - 210
+                textRect.y = 55 + 50*i
+                g_screen.blit(text, textRect)
+
+                text = TEXTFONT.render(f'{math.floor(self.viewingScores[i]["acc"]*1000)/10}%', True, WHITE) # 정확도
+                textRect = text.get_rect()
+                textRect.centerx = g_screen_width - 110
+                textRect.y = 55 + 50*i
+                g_screen.blit(text, textRect)
 
     def getAcc(self): # calcPoints로 정확도를 계산하는 함수
         if(len(self.calcPoints) <= 1):
@@ -324,21 +349,27 @@ class IngameScene: # 인게임 화면
         acc = self.getAcc()
         global g_bestAcc
         global g_bestDrawPoints
-        if(acc > g_bestAcc):
+        #if(acc > g_bestAcc):
+        if(True):
             self.isNewRecord = True
             g_bestAcc = acc
             g_bestDrawPoints = self.drawPoints
+        changeScene(PostScoreScene)
 
 class PostScoreScene: # 점수등록 화면
     def __init__(self):
         self.namePoints = [] # 이름 쓴 위치들
         self.rank = g_scoreBoard.indexWhenInserted(g_bestAcc) # 최고점수가 추가될 경우의 순위
+        self.isdrawMode = False # 이름 쓰는 중인지 여부
     def event(self, event):
         mouse = pygame.mouse.get_pos()
         click = pygame.mouse.get_pressed()
-        if(event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.MOUSEMOTION):
+        if(event.type == pygame.MOUSEBUTTONDOWN):
+            if((40 < mouse[0] < 780 and 660 < mouse[1] < 900 and len(self.namePoints) < 10000)): # 그릴수 있는 하얀 박스 안
+                self.isdrawMode = True
+        if((event.type == pygame.MOUSEBUTTONDOWN or event.type == pygame.MOUSEMOTION) and self.isdrawMode):
             if(click[0]):
-                if((40 < mouse[0] < 780 and 660 < mouse[1] < 900 and len(self.namePoints) < 10000)): # 그릴수 있는 하얀 박스 밖 -> 상자 벗어남
+                if((40 < mouse[0] < 780 and 660 < mouse[1] < 900 and len(self.namePoints) < 10000)): # 그릴수 있는 하얀 박스 안
                     # 그린 점 추가
                     self.namePoints.append([mouse[0] - 30, mouse[1] - 650])
     def draw(self):
@@ -355,6 +386,9 @@ class PostScoreScene: # 점수등록 화면
         g_screen.blit(accText, ((g_screen_height - 70)/2 + 80, 180))
         accText = TITLEFONT.render(f'현재 순위 : {self.rank}등', True, WHITE)
         g_screen.blit(accText, ((g_screen_height - 70)/2 + 80, 260))
+        if(len(g_scoreBoard) + 1 >= 25):
+            accText = TITLEFONT.render(f'상위 {(1 - self.rank/(len(g_scoreBoard) + 1)) : .0%}', True, WHITE)
+            g_screen.blit(accText, ((g_screen_height - 70)/2 + 80, 340))
 
         accText = TITLEFONT.render('이름을 써 주세요', True, WHITE)
         g_screen.blit(accText, (50, 550))
@@ -367,6 +401,7 @@ class PostScoreScene: # 점수등록 화면
         postScoreButten = TextButten("이름등록", [g_screen_width - 180, 820], lambda: self.postScore(), self.namePoints) # 등록완료 버튼
     def resetName(self):
         self.namePoints = []
+        self.isdrawMode = False
     def postScore(self): # 점수 등록
         global g_scoreBoard
         global g_bestAcc
@@ -374,7 +409,6 @@ class PostScoreScene: # 점수등록 화면
         g_scoreBoard.add(g_bestAcc, g_bestDrawPoints, self.namePoints)
         g_bestAcc = 0
         g_bestDrawPoints = []
-        print(len(self.namePoints))
         changeScene(TitleScene)
 
 class ScoreBoardScene():
@@ -382,7 +416,7 @@ class ScoreBoardScene():
         self.page = 1 # 1부터 시작
         self.maxPage = len(g_scoreBoard) // 6
         if(self.maxPage < 1): self.maxPage = 1
-        self.viewingScores = g_scoreBoard.rangeQuery(1,6)
+        self.viewingScores = g_scoreBoard.rangeQuery(1,6) # 현재 보고 있는 점수들
     def event(self, event):
         pass
     def draw(self):
@@ -439,6 +473,98 @@ class ScoreBoardScene():
             self.page = self.maxPage
         self.viewingScores = g_scoreBoard.rangeQuery(6*(self.page - 1) + 1, 6*(self.page - 1) + 6)
 
+class CreditScene():
+    def __init__(self):
+        self.hayun = 0
+        self.isDogyunAble = True
+    def event(self, event):
+        mouse = pygame.mouse.get_pos()
+        if(event.type == pygame.MOUSEBUTTONDOWN):
+            if((g_screen_width/2 - 150 < mouse[0] < g_screen_width/2 + 150 and 200 < mouse[1] < 240)):
+                if(self.isDogyunAble):
+                    if(self.hayun == 9):
+                        global g_buttenCoolTime
+                        g_buttenCoolTime = 30
+                        changeScene(AdminScene)
+                    self.isDogyunAble = False
+            if((g_screen_width/2 - 100 < mouse[0] < g_screen_width/2 + 100 and 300 < mouse[1] < 350)):
+                self.hayun += 1
+    def draw(self):
+        text_Title = TITLEFONT.render("크레딧", True, WHITE)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 50
+        g_screen.blit(text_Title, text_Rect)
+
+        text_Title = TEXTFONT.render("아이디어 - 김도균", True, WHITE)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 200
+        g_screen.blit(text_Title, text_Rect)
+
+        text_Title = TEXTFONT.render("총괄 - 조하윤", True, WHITE)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 300
+        g_screen.blit(text_Title, text_Rect)
+
+        text_Title = TEXTFONT.render("포스터 디자인 - 박준희", True, WHITE)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 500
+        g_screen.blit(text_Title, text_Rect)
+
+        text_Title = TEXTFONT.render("제작지원 - 조경호 선생님", True, WHITE)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 600
+        g_screen.blit(text_Title, text_Rect)
+
+        text_Title = TEXTFONT.render("쓸모있는 AI - ChatGPT 4o", True, WHITE)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 700
+        g_screen.blit(text_Title, text_Rect)
+
+        backButten = TextButten("돌아가기", [g_screen_width/2 - 350, 675], lambda: changeScene(TitleScene)) # 돌아가기 버튼
+
+        text_Title = TITLEFONT.render("Powered By 안산강서고등학교", True, YELLOW)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 850
+        g_screen.blit(text_Title, text_Rect)
+
+class AdminScene():
+    def __init__(self):
+        pass
+    def event(self, event):
+        pass
+    def draw(self):
+        text_Title = TITLEFONT.render("관리자 설정", True, WHITE)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 50
+        g_screen.blit(text_Title, text_Rect)
+
+        startButten = TextButten("점수표 내보내기", [g_screen_width/2, 350], lambda: self.exportScoreBoard())
+        startButten = TextButten("점수표 불러오기", [g_screen_width/2, 480], lambda: self.importScoreBoard())
+        text_Title = TEXTFONT.render("※ 오래 걸릴 수 있음", True, RED)
+        text_Rect = text_Title.get_rect()
+        text_Rect.centerx = round(g_screen_width/2)
+        text_Rect.y = 580
+        g_screen.blit(text_Title, text_Rect)
+
+        backButten = TextButten("돌아가기", [g_screen_width/2 - 350, 675], lambda: changeScene(TitleScene)) # 돌아가기 버튼
+    def exportScoreBoard(self):
+        global g_scoreBoard
+        with open('scoreboard.pkl', 'wb') as f:
+            pickle.dump(g_scoreBoard, f)
+            print('export done!')
+    def importScoreBoard(self):
+        global g_scoreBoard
+        with open('scoreboard.pkl', 'rb') as f:
+            g_scoreBoard = pickle.load(f)
+            print('import done!')
 
 #이벤트 루프
 g_running = True #게임 진행 여부에 대한 변수 True : 게임 진행 중
