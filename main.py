@@ -64,26 +64,31 @@ class ScoreBoard:
     def __init__(self):
         self.data = SortedList(key = self.key)
         self.nextID = 0
+        self.recentData = []
     def __len__(self):
         return len(self.data)
     def key(self, x):
         return (-x['acc'] , x['id'])
     def add(self, acc, drawPoints, namePoints): # 정확도, 그림, 이름으로 점수 등록
         #self.data.add([-acc, drawPoints, namePoints, self.nextID])
-        self.data.add({'acc' : acc, 'id' : self.nextID, 'drawPoints' : drawPoints, 'namePoints' : namePoints})
+        temp = {'acc' : acc, 'id' : self.nextID, 'drawPoints' : drawPoints, 'namePoints' : namePoints}
+        self.data.add(temp)
         self.nextID += 1
+        self.recentData = temp
         return self.nextID
-    def indexWhenInserted(self, acc): # acc가 점수표에 추가된다면 몇 등일지를 반환
+    def getIndexWhenInserted(self, acc): # acc가 점수표에 추가된다면 몇 등일지를 반환
         temp = {'acc' : acc, 'id' : -1, 'drawPoints' : [], 'namePoints' : []}
         self.data.add(temp)
         rank = self.data.bisect_left(temp) + 1 # 1등부터 시작
         self.data.remove(temp)
         return rank
-    def rangeQuery(self, m, n): # m등부터 n등까지의 값 반환 (m,n등 포함, m<n), 누락된 등수는 None으로 채움
+    def getRangeIndex(self, m, n): # m등부터 n등까지의 값 반환 (m,n등 포함, m<n), 누락된 등수는 None으로 채움
         temp = list(self.data.islice(m - 1, n)) # ex: 1등~5등 -> 0,1,2,3,4
         for i in range(len(temp), n - m + 1):
             temp.append(None)
         return temp
+    def getRecent(self):
+        return self.recentData
 
 g_scoreBoard = ScoreBoard()
 
@@ -119,7 +124,8 @@ def toScore(acc):
 
 class TitleScene: # 타이틀 화면
     def __init__(self):
-        pass
+        self.bestScore = g_scoreBoard.getRangeIndex(1,1)[0]
+        self.recentScore = g_scoreBoard.getRecent()
     def event(self, event):
         pass
     def draw(self):
@@ -129,12 +135,49 @@ class TitleScene: # 타이틀 화면
         text_Rect.centerx = round(g_screen_width/2)
         text_Rect.y = 50
         g_screen.blit(text_Title, text_Rect)
-        pygame.draw.circle(g_screen, WHITE, (g_screen_width/2, 300), 100, 5)
+        #pygame.draw.circle(g_screen, WHITE, (g_screen_width/2, 300), 100, 5)
 
         # 버튼들
         startButten = TextButten("시작하기!", [g_screen_width/2, 675], lambda: changeScene(IngameScene))
         boardButten = TextButten("점수판", [g_screen_width/2 + 350, 675], lambda: changeScene(ScoreBoardScene))
         creditButten = TextButten("크레딧", [g_screen_width/2 - 350, 675], lambda: changeScene(CreditScene))
+
+        text = TITLEFONT.render('BEST', True, YELLOW)
+        textRect = text.get_rect()
+        textRect.centerx = g_screen_width/2 - 150
+        textRect.y = 150
+        g_screen.blit(text, textRect)
+
+        # 최고의 원
+        pygame.draw.rect(g_screen, WHITE, [g_screen_width/2 - 250, 480, 200, 200*(260/760)], 3) # 이름 상자
+        pygame.draw.circle(g_screen, GRAY, [g_screen_width/2 - 250 + 200*(512/934), 250 + 200*(512/934)], 1, 1) # 중점
+        pygame.draw.rect(g_screen, WHITE, [g_screen_width/2 - 250, 250, 200, 200], 3) # 그림 상자
+        if(not self.bestScore is None):
+            name = self.bestScore['namePoints']
+            for j in range(len(name)): # 이름
+                pygame.draw.circle(g_screen, WHITE, [name[j][0]/(760/200) + g_screen_width/2 - 250, name[j][1]/(760/200) + 480], 2, 2)
+            draw = self.bestScore['drawPoints']
+            for j in range(len(draw)): # 그림
+                pygame.draw.circle(g_screen, WHITE, [(draw[j][0] - 30)/((g_screen_height - 120)/200) + g_screen_width/2 - 250, (draw[j][1] - 30)/((g_screen_height - 120)/200) + 250], 4, 4)
+
+        text = TITLEFONT.render('RECENT', True, YELLOW)
+        textRect = text.get_rect()
+        textRect.centerx = g_screen_width/2 + 150
+        textRect.y = 150
+        g_screen.blit(text, textRect)
+
+        # 최근의 원
+        pygame.draw.rect(g_screen, WHITE, [g_screen_width/2 + 50, 480, 200, 200*(260/760)], 3) # 이름 상자
+        pygame.draw.circle(g_screen, GRAY, [g_screen_width/2 + 50 + 200*(512/934), 250 + 200*(512/934)], 1, 1) # 중점
+        pygame.draw.rect(g_screen, WHITE, [g_screen_width/2 + 50, 250, 200, 200], 3) # 그림 상자
+        if(not self.bestScore is None):
+            name = self.bestScore['namePoints']
+            for j in range(len(name)): # 이름
+                pygame.draw.circle(g_screen, WHITE, [name[j][0]/(760/200) + g_screen_width/2 + 50, name[j][1]/(760/200) + 480], 2, 2)
+            draw = self.bestScore['drawPoints']
+            for j in range(len(draw)): # 그림
+                pygame.draw.circle(g_screen, WHITE, [(draw[j][0] - 30)/((g_screen_height - 120)/200) + g_screen_width/2 + 50, (draw[j][1] - 30)/((g_screen_height - 120)/200) + 250], 4, 4)
+
 
 class IngameScene: # 인게임 화면
     def __init__(self):
@@ -151,7 +194,7 @@ class IngameScene: # 인게임 화면
         self.firstPointAngle = None # 중점에 대한 첫 위치의 편각
         self.lastPointAngle = None # 가장 그리는 방향으로 많이 돈 위치의 편각
 
-        self.viewingScores = g_scoreBoard.rangeQuery(1,11) # 오른쪽 점수표의 점수들
+        self.viewingScores = g_scoreBoard.getRangeIndex(1,11) # 오른쪽 점수표의 점수들
 
     def event(self, event):
         mouse = pygame.mouse.get_pos()
@@ -359,7 +402,7 @@ class IngameScene: # 인게임 화면
 class PostScoreScene: # 점수등록 화면
     def __init__(self):
         self.namePoints = [] # 이름 쓴 위치들
-        self.rank = g_scoreBoard.indexWhenInserted(g_bestAcc) # 최고점수가 추가될 경우의 순위
+        self.rank = g_scoreBoard.getIndexWhenInserted(g_bestAcc) # 최고점수가 추가될 경우의 순위
         self.isdrawMode = False # 이름 쓰는 중인지 여부
     def event(self, event):
         mouse = pygame.mouse.get_pos()
@@ -416,7 +459,7 @@ class ScoreBoardScene():
         self.page = 1 # 1부터 시작
         self.maxPage = len(g_scoreBoard) // 6
         if(self.maxPage < 1): self.maxPage = 1
-        self.viewingScores = g_scoreBoard.rangeQuery(1,6) # 현재 보고 있는 점수들
+        self.viewingScores = g_scoreBoard.getRangeIndex(1,6) # 현재 보고 있는 점수들
     def event(self, event):
         pass
     def draw(self):
@@ -471,7 +514,7 @@ class ScoreBoardScene():
             self.page = 1
         if(self.page > self.maxPage):
             self.page = self.maxPage
-        self.viewingScores = g_scoreBoard.rangeQuery(6*(self.page - 1) + 1, 6*(self.page - 1) + 6)
+        self.viewingScores = g_scoreBoard.getRangeIndex(6*(self.page - 1) + 1, 6*(self.page - 1) + 6)
 
 class CreditScene():
     def __init__(self):
