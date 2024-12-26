@@ -64,7 +64,7 @@ class ScoreBoard:
     def __init__(self):
         self.data = SortedList(key = self.key)
         self.nextID = 0
-        self.recentData = []
+        self.recentData = None
     def __len__(self):
         return len(self.data)
     def key(self, x):
@@ -170,11 +170,11 @@ class TitleScene: # 타이틀 화면
         pygame.draw.rect(g_screen, WHITE, [g_screen_width/2 + 50, 480, 200, 200*(260/760)], 3) # 이름 상자
         pygame.draw.circle(g_screen, GRAY, [g_screen_width/2 + 50 + 200*(512/934), 250 + 200*(512/934)], 1, 1) # 중점
         pygame.draw.rect(g_screen, WHITE, [g_screen_width/2 + 50, 250, 200, 200], 3) # 그림 상자
-        if(not self.bestScore is None):
-            name = self.bestScore['namePoints']
+        if(not self.recentScore is None):
+            name = self.recentScore['namePoints']
             for j in range(len(name)): # 이름
                 pygame.draw.circle(g_screen, WHITE, [name[j][0]/(760/200) + g_screen_width/2 + 50, name[j][1]/(760/200) + 480], 2, 2)
-            draw = self.bestScore['drawPoints']
+            draw = self.recentScore['drawPoints']
             for j in range(len(draw)): # 그림
                 pygame.draw.circle(g_screen, WHITE, [(draw[j][0] - 30)/((g_screen_height - 120)/200) + g_screen_width/2 + 50, (draw[j][1] - 30)/((g_screen_height - 120)/200) + 250], 4, 4)
 
